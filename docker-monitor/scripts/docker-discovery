@@ -1,0 +1,18 @@
+#!/bin/env python
+
+import subprocess
+import json
+
+if __name__ == "__main__":
+
+    data = []
+    docker_info = """docker ps -a | awk '{print $1 "\t" $NF}' |sed '1d' """
+    result = subprocess.Popen(docker_info, shell=True, stdout=subprocess.PIPE)
+    display_result_all = result.stdout.readlines()
+    for info in display_result_all:
+      docker_name = info.split()[1]
+      docker_id = info.split()[0]
+      docker_fqdn = "".join(docker_name + "-" + docker_id)
+      data.append({"#DOCKER_NAME": docker_fqdn})
+    print json.dumps({"data": data})
+

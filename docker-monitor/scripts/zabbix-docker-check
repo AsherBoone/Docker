@@ -1,0 +1,58 @@
+#!/usr/bin/env python
+#-*- coding: utf-8 -*-
+from docker import Client
+import os
+import re
+import sys
+import subprocess
+import time
+import ast
+import json
+def check_container_stats(container_name,collect_item):
+  docker_client = Client(base_url='tcp://127.0.0.1:2375')
+  container_status = docker_client.inspect_container(container_name)['State']['Running']
+  if not container_status:return -1
+  container_collect=docker_client.stats(container_name)
+  old_result_dict = json.loads(container_collect.next())
+#  old_result_dict=ast.literal_eval(old_result) 
+#  new_result_dict = ast.literal_eval(ontainer_collect.next())
+  new_result_dict = json.loads(container_collect.next())
+  container_collect.close()
+
+  if collect_item == 'cpu_total_usage':
+    result=new_result_dict['cpu_stats']['cpu_usage']['total_usage'] - old_result_dict['cpu_stats']['cpu_usage']['total_usage']
+  elif collect_item == 'cpu_system_uasge':
+    result=new_result_dict['cpu_stats']['system_cpu_usage'] - old_result_dict['cpu_stats']['system_cpu_usage']
+  elif collect_item == 'cpu_percent':
+    cpu_total_usage=new_result_dict['cpu_stats']['cpu_usage']['total_usage'] - old_result_dict['cpu_stats']['cpu_usage']['total_usage']
+    cpu_system_uasge=new_result_dict['cpu_stats']['system_cpu_usage'] - old_result_dict['cpu_stats']['system_cpu_usage']
+    cpu_num=len(old_result_dict['cpu_stats']['cpu_usage']['percpu_usage'])
+    result=round((float(cpu_total_usage)/float(cpu_system_uasge))*cpu_num*100.0,2)
+  elif collect_item == 'mem_usage':
+    result=new_result_dict['memory_stats']['usage']
+  elif collect_item == 'mem_limit':
+    result=new_result_dict['memory_stats']['limit']
+  elif collect_item == 'mem_percent':
+    mem_usage=new_result_dict['memory_stats']['usage']
+    mem_limit=new_result_dict['memory_stats']['limit']
+    result=round(float(mem_usage)/float(mem_limit)*100.0,2)
+  #network_rx_packets=new_result['network']['rx_packets']
+  #network_tx_packets=new_result['network']['tx_packets']
+  elif collect_item == 'network_rx_bytes':
+    network_check_command="""docker exec %s ifconfig eth1|grep bytes|awk -F ':' '{print $2,$3}'|awk -F '(' '{print $1,$2}'|awk -F ')' '{print $1}'|awk '{print "{\\"rx\\":"$1",\\"tx\\":"$2"}"}'"""%container_name
+    network_old_result=eval(((subprocess.Popen(network_check_command,shell=True,stdout=subprocess.PIPE)).stdout.readlines()[0]).strip('\n'))
+    time.sleep(1)
+    network_new_result=eval(((subprocess.Popen(network_check_command,shell=True,stdout=subprocess.PIPE)).stdout.readlines()[0]).strip('\n'))
+    #unit KB
+    result=int(network_new_result['rx']) - int(network_old_result['rx'])
+  elif collect_item == 'network_tx_bytes':
+    network_check_command="""docker exec %s ifconfig eth1|grep bytes|awk -F ':' '{print $2,$3}'|awk -F '(' '{print $1,$2}'|awk -F ')' '{print $1}'|awk '{print "{\\"rx\\":"$1",\\"tx\\":"$2"}"}'"""%container_name
+    network_old_result=eval(((subprocess.Popen(network_check_command,shell=True,stdout=subprocess.PIPE)).stdout.readlines()[0]).strip('\n'))
+    time.sleep(1)
+    network_new_result=eval(((subprocess.Popen(network_check_command,shell=True,stdout=subprocess.PIPE)).stdout.readlines()[0]).strip('\n'))
+    result=int(network_new_result['tx']) - int(network_old_result['tx'])
+  return result
+if __name__ == "__main__":
+  container_name=sys.argv[1]
+  collect_item=sys.argv[2]
+  print check_container_stats(container_name,collect_item)

@@ -1,0 +1,45 @@
+#!/bin/env python
+
+import commands
+import json
+import sys
+from docker import Client
+
+resource = sys.argv[1]
+docker_name = sys.argv[2]
+
+def docker_id(docker_name):
+  if docker_name:
+    docker_id=docker_name.split('-')[-1]
+    return docker_id
+
+# @docker_name
+def cpu_load(stats):
+  for stat in stats:
+    if stat != 'cpu_stats':continue
+    cpu_num=len(stats[stat]['cpu_usage']['percpu_usage'])
+    cpu_total_usage = stats[stat]['cpu_usage']['total_usage']
+    cpu_system_usage = stats[stat]['system_cpu_usage']
+    result=round((float(cpu_total_usage)/float(cpu_system_usage))*cpu_num*100.0,3)
+    return result
+#    return cpu_total_usage,  cpu_system_usage , cpu_num
+      
+
+def mem_load(stats):
+  for stat in stats:
+    if stat != 'memory_stats':continue
+    mem_usage = stats[stat]['usage']
+    mem_limit = stats[stat]['limit']
+    result=round(float(mem_usage)/float(mem_limit)*100.0,2)
+    return result
+
+if __name__ == '__main__':
+  docker_client = Client(base_url='tcp://127.0.0.1:2375')
+  docker_ids = docker_id(docker_name)
+  stats = docker_client.stats(docker_ids, stream=False)
+  if resource == "cpu":
+    print cpu_load(stats)
+  elif resource == 'mem':
+    print mem_load(stats)
+
+
